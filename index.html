@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>记账本</title>
+  <style>
+    body { font-family: sans-serif; max-width: 600px; margin: 40px auto; }
+    input { padding: 6px; margin-right: 8px; }
+    button { padding: 6px 12px; cursor: pointer; margin-left: 4px; }
+    li { margin: 8px 0; }
+    #topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    #pager { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <h1>记账本</h1>
+
+  <div id="login-box">
+    <input id="username" placeholder="用户名">
+    <input id="password" type="password" placeholder="密码">
+    <button onclick="login()">登录</button>
+  </div>
+
+  <div id="app" style="display:none">
+    <div id="topbar">
+      <span id="who"></span>
+      <button onclick="logout()">退出</button>
+    </div>
+
+    <div>
+      <input id="item" placeholder="项目">
+      <input id="amount" type="number" placeholder="金额">
+      <button onclick="addRecord()">记一笔</button>
+    </div>
+
+    <ul id="list"></ul>
+
+    <div id="pager">
+      <button id="prev" onclick="changePage(-1)">上一页</button>
+      <span id="pageinfo"></span>
+      <button id="next" onclick="changePage(1)">下一页</button>
+    </div>
+
+    <p id="summary"></p>
+  </div>
+
+  <script>
+    const PAGE_SIZE = 5;
+    let token = localStorage.getItem('token') || '';
+    let currentPage = 1;
+
+    function authHeaders() {
+      return { 'Authorization': 'Bearer ' + token };
+    }
+
+    async function login() {
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+
+      const res = await fetch('/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: username, password: password })
+      });
+
+      if (!res.ok) {
+        alert('用户名或密码错误');
+        return;
+      }
+
+      const data = await res.json();
+      token = data.token;
+      localStorage.setItem('token', token);
+      document.getElementById('who').textContent = '已登录：' + data.username;
+      showApp();
+    }
+
+    function logout() {
+      localStorage.removeItem('token');
+      token = '';
+      location.reload();
+    }
+
+    function showApp() {
+      document.getElementById('login-box').style.display = 'none';
+      document.getElementById('app').style.display = 'block';
+      currentPage = 1;
+      load();
+    }
+
+    async function load() {
+      const res = await fetch(
+        `/records?page=${currentPage}&size=${PAGE_SIZE}`,
+        { headers: authHeaders() }
+      );
+
+      if (res.status === 401) {
+        localStorage.removeItem('token');
+        token = '';
+        document.getElementById('app').style.display = 'none';
+        document.getElementById('login-box').style.display = 'block';
+        return;
+      }
+
+      const data = await res.json();
+      const pages = data.pages || 1;
+
+      const list = document.getElementById('list');
+      list.innerHTML = '';
+
+      for (const r of data.items) {
+        const li = document.createElement('li');
+        li.textContent = `${r.item} ${r.amount} 元`;
+
+        const btn = document.createElement('button');
+        btn.textContent = '删除';
+        btn.onclick = () => removeRecord(r.id);
+        li.appendChild(btn);
+
+        list.appendChild(li);
+      }
+
+      document.getElementById('pageinfo').textContent =
+        `第 ${data.page} / ${pages} 页（共 ${data.total} 条）`;
+      document.getElementById('prev').disabled = currentPage <= 1;
+      document.getElementById('next').disabled = currentPage >= pages;
+
+      const s = await (await fetch('/summary', { headers: authHeaders() })).json();
+      document.getElementById('summary').textContent =
+        `共 ${s.count} 笔，总计 ${s.total} 元`;
+    }
+
+    function changePage(delta) {
+      currentPage += delta;
+      load();
+    }
+
+    async function addRecord() {
+      const item = document.getElementById('item').value;
+      const amount = Number(document.getElementById('amount').value);
+
+      await fetch('/records', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ item: item, amount: amount })
+      });
+
+      document.getElementById('item').value = '';
+      document.getElementById('amount').value = '';
+      currentPage = 1;
+      load();
+    }
+
+    async function removeRecord(id) {
+      await fetch('/records/' + id, { method: 'DELETE', headers: authHeaders() });
+      load();
+    }
+
+    if (token) {
+      document.getElementById('who').textContent = '已登录';
+      showApp();
+    }
+  </script>
+</body>
+</html>
