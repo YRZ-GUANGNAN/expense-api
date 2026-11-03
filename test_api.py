@@ -8,6 +8,29 @@ from app.main import app
 
 client = TestClient(app)
 
+TEST_PASSWORD = "test123"
+
+
+@pytest.fixture
+def temp_user():
+    """创建临时用户，测试结束后删掉。不依赖数据库里已有的数据。"""
+    username = f"test_{uuid.uuid4().hex[:8]}"
+
+    client.post("/register", json={"username": username, "password": TEST_PASSWORD})
+    res = client.post("/login", json={"username": username, "password": TEST_PASSWORD})
+    token = res.json()["token"]
+
+    yield {"username": username, "token": token}
+
+    with db_conn() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "DELETE FROM records WHERE user_id = (SELECT id FROM users WHERE username = %s)",
+            (username,),
+        )
+        cursor.execute("DELETE FROM users WHERE username = %s", (username,))
+        conn.commit()
+
 
 def test_root():
     res = client.get("/")
@@ -27,39 +50,23 @@ def test_records_rejects_bad_token():
     assert res.status_code == 401
 
 
-def test_login_wrong_password():
+def test_login_wrong_password(temp_user):
     """密码错误必须 401"""
-    res = client.post("/login", json={"username": "xiaoming", "password": "wrong"})
+    res = client.post(
+        "/login",
+        json={"username": temp_user["username"], "password": "wrong-password"},
+    )
     assert res.status_code == 401
 
 
-def test_login_success():
+def test_login_success(temp_user):
     """正确密码应该拿到 token"""
-    res = client.post("/login", json={"username": "xiaoming", "password": "123456"})
+    res = client.post(
+        "/login",
+        json={"username": temp_user["username"], "password": TEST_PASSWORD},
+    )
     assert res.status_code == 200
     assert "token" in res.json()
-@pytest.fixture
-def temp_user():
-    """创建临时用户，测试结束后删掉。"""
-    username = f"test_{uuid.uuid4().hex[:8]}"
-    password = "test123"
-
-    # 准备：注册 + 登录
-    client.post("/register", json={"username": username, "password": password})
-    res = client.post("/login", json={"username": username, "password": password})
-    token = res.json()["token"]
-
-    yield {"username": username, "token": token}
-
-    # 清理：删掉这个用户的记录和账号
-    with db_conn() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "DELETE FROM records WHERE user_id = (SELECT id FROM users WHERE username = %s)",
-            (username,),
-        )
-        cursor.execute("DELETE FROM users WHERE username = %s", (username,))
-        conn.commit()
 
 
 def test_full_flow(temp_user):
