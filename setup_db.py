@@ -1,15 +1,6 @@
-import pymysql
+from app.db import get_conn
 
-from config import db_host, db_port, db_user, db_password, db_name
-
-conn = pymysql.connect(
-    host=db_host,
-    port=db_port,
-    user=db_user,
-    password=db_password,
-    database=db_name,
-)
-
+conn = get_conn()
 cursor = conn.cursor()
 
 cursor.execute("""

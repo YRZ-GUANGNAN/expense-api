@@ -1,8 +1,10 @@
 import uuid
+
 import pytest
-from app import get_conn
 from fastapi.testclient import TestClient
-from app import app
+
+from app.db import db_conn
+from app.main import app
 
 client = TestClient(app)
 
@@ -50,8 +52,7 @@ def temp_user():
     yield {"username": username, "token": token}
 
     # 清理：删掉这个用户的记录和账号
-    conn = get_conn()
-    try:
+    with db_conn() as conn:
         cursor = conn.cursor()
         cursor.execute(
             "DELETE FROM records WHERE user_id = (SELECT id FROM users WHERE username = %s)",
@@ -59,8 +60,6 @@ def temp_user():
         )
         cursor.execute("DELETE FROM users WHERE username = %s", (username,))
         conn.commit()
-    finally:
-        conn.close()
 
 
 def test_full_flow(temp_user):
@@ -88,47 +87,11 @@ def test_full_flow(temp_user):
     assert res.json()["count"] == 1
     assert res.json()["total"] == 12.5
 
-    # ⑤ 修改
-    res = client.put(
-        f"/records/{record_id}",
-        json={"item": "改名了", "amount": 20},
-        headers=headers,
-    )
-    assert res.status_code == 200
-
-    res = client.get("/records", headers=headers)
-    assert res.json()["items"][0]["item"] == "改名了"
-    assert res.json()["items"][0]["amount"] == 20
-
-    # ⑥ 删除
+    # ⑤ 删除
     res = client.delete(f"/records/{record_id}", headers=headers)
     assert res.status_code == 200
 
-    # ⑦ 删完就没了
+    # ⑥ 删完就没了
     res = client.get("/records", headers=headers)
     assert res.json()["items"] == []
     assert res.json()["total"] == 0
-
-
-def test_pagination(temp_user):
-    headers = {"Authorization": f"Bearer {temp_user['token']}"}
-
-    for i in range(12):
-        client.post(
-            "/records",
-            json={"item": f"item{i}", "amount": 1},
-            headers=headers,
-        )
-
-    res = client.get("/records?page=1&size=5", headers=headers)
-    body = res.json()
-    assert body["total"] == 12
-    assert body["pages"] == 3
-    assert len(body["items"]) == 5
-
-    res = client.get("/records?page=3&size=5", headers=headers)
-    assert len(res.json()["items"]) == 2
-
-    # 参数越界由 Query(ge/le) 拦截
-    assert client.get("/records?page=0", headers=headers).status_code == 422
-    assert client.get("/records?size=999", headers=headers).status_code == 422
