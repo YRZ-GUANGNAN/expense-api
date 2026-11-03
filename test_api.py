@@ -2,9 +2,11 @@ import uuid
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import delete, select
 
-from app.db import db_conn
+from app.db import SessionLocal
 from app.main import app
+from app.models import Record, User
 
 client = TestClient(app)
 
@@ -22,14 +24,14 @@ def temp_user():
 
     yield {"username": username, "token": token}
 
-    with db_conn() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "DELETE FROM records WHERE user_id = (SELECT id FROM users WHERE username = %s)",
-            (username,),
-        )
-        cursor.execute("DELETE FROM users WHERE username = %s", (username,))
-        conn.commit()
+    with SessionLocal() as db:
+        user = db.execute(
+            select(User).where(User.username == username)
+        ).scalar_one_or_none()
+        if user is not None:
+            db.execute(delete(Record).where(Record.user_id == user.id))
+            db.delete(user)
+            db.commit()
 
 
 def test_root():
