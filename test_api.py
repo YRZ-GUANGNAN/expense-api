@@ -34,7 +34,7 @@ def temp_user():
 
 def test_root():
     res = client.get("/")
-    assert res.status_code == 999
+    assert res.status_code == 200
     assert res.json()["message"] == "你好，这是我的第一个 Web 服务"
 
 
