@@ -108,11 +108,11 @@ pip install -r requirements.txt
 # 2. 配置数据库
 copy config.example.py config.py     # 填入数据库账号、密码与库名
 
-# 3. 建表
-python setup_db.py
+# 3. 建表（执行 Alembic 迁移）
+alembic upgrade head
 
 # 4. 启动
-uvicorn app:app --reload
+uvicorn app.main:app --reload
 ```
 
 打开：
@@ -149,9 +149,9 @@ def temp_user():
 ## 项目结构
 
 ```text
-app.py              FastAPI 服务：路由、鉴权、数据库访问
+app/                FastAPI 应用包：路由、鉴权、ORM 模型、数据库访问
 index.html          网页界面（登录 / 记账 / 删除 / 分页）
-setup_db.py         建表脚本
+migrations/         Alembic 迁移脚本（表结构的唯一真实来源）
 test_api.py         接口测试
 config.example.py   配置模板（复制为 config.py 后填写）
 requirements.txt    依赖清单

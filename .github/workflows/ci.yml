@@ -49,8 +49,8 @@ jobs:
       - name: 代码检查
         run: ruff check .
 
-      - name: 初始化数据库
-        run: python setup_db.py
+      - name: 执行数据库迁移
+        run: alembic upgrade head
 
       - name: 运行测试
         run: pytest -q

@@ -1,6 +1,8 @@
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+# Alembic 生成的迁移脚本是自动产物，格式由工具决定，不参与风格检查
+extend-exclude = ["migrations/versions"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "S", "ASYNC", "LOG"]
